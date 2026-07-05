@@ -2,70 +2,87 @@
 
 **Let your AI agent ask you for a design review — out loud, pointing at the real app.**
 
-Crit is a new primitive for agentic product work:
+The agent runs `crit review`. Your browser opens a mirrored copy of your app with a recording
+widget. You narrate feedback while pointing, clicking, and navigating. The agent gets back a
+timestamped transcript where every "this" and "here" is resolved to a real element — with its
+source file, line, and React component.
 
-> The agent asks for a Crit.
-> You narrate a review while pointing around the app with your mouse.
-> The agent receives a rich, timestamped review transcript with enough context to act.
+## How to
 
-When an agent runs `crit review`, your browser opens a mirrored copy of your app with a small
-recording widget. You press Start, talk through your feedback while hovering, clicking, and
-navigating like normal. When you press Stop, Crit transcribes your audio, condenses your
-pointer/page activity into a readable timeline, merges the two with a small AI model, and hands
-the agent a review like this:
+### 1. Install the CLI
+
+```bash
+git clone https://github.com/ion-design/design-crit.git
+cd design-crit
+npm install
+npm link        # puts `crit` on your PATH
+```
+
+Requires Node 20+. Verify with:
+
+```bash
+crit --help
+```
+
+### 2. Set API keys
+
+Crit needs a speech-to-text key, and optionally an Anthropic key for the transcript merge:
+
+```bash
+export OPENAI_API_KEY=sk-...      # required: Whisper transcription
+export ANTHROPIC_API_KEY=sk-...   # optional: Claude does the merge (falls back to OpenAI)
+```
+
+You can also just put these in the reviewed project's `.env` — crit reads `OPENAI_API_KEY`,
+`ANTHROPIC_API_KEY`, and `CRIT_*` from there (calling env wins; no other project secrets are
+touched). No keys at all? Use `--mock-ai` to try the full loop with canned transcription.
+
+### 3. Run a review
+
+```bash
+cd /path/to/your/react-app     # Next.js or Vite (any app with a dev server works)
+crit review
+```
+
+Your browser opens the mirrored app. Press **● Start Crit**, allow the microphone, and talk
+through your feedback while using your mouse as a pointer — a panel at the bottom-left shows
+the source file of whatever you're hovering. Press **■ Stop** when done. The final review
+prints to stdout and artifacts land in `.crit/reviews/<session>/`.
+
+### 4. Install it into your agent
+
+**Claude Code** — copy the ready-made slash command, then type `/crit` in any project:
+
+```bash
+cp .claude/commands/crit.md ~/.claude/commands/crit.md
+```
+
+**Any other agent** — register a tool/command that shells out to:
+
+```bash
+crit review --source . --json
+```
+
+The call blocks until the user finishes (give it a generous timeout — reviews take minutes).
+stdout is a single JSON object: on `"status": "completed"`, read `final_transcript` (Markdown)
+and `artifacts.review_json` (structured issues/timeline with timestamps, URLs, and source
+anchors). `"cancelled"` means the user declined; `"error"` carries `error.code` and any partial
+artifact paths.
+
+## What the agent gets back
 
 ```markdown
 [00:03] On `/dashboard`, the user says the first impression feels cluttered.
         The pointer circles the main metrics cards.
 
-[00:17] The user says, "I'm not sure what I'm supposed to click first."
-        The pointer pauses near the "Create project" button but does not click it.
-
-[00:31] The user clicks "Create project" (src/components/Hero.tsx, <Hero>) and
-        lands on /projects/new.
+[00:15] The user says "these two buttons should just be links" while pointing
+        at the "Dashboard" and "Projects" buttons (src/App.jsx:12–13, <App>).
 ```
 
-Because Crit runs your app through the [ion compiler](ion-compiler-export/PROMPT.md), every
-element you point at is annotated with its **source file, line, and React component** — so
-"make this button stand out" arrives with the exact place in the code to do it.
-
-## Quick start
-
-```bash
-git clone https://github.com/<you>/crit && cd crit
-npm install
-npm link        # puts `crit` on your PATH
-npm test        # 27 tests, incl. a mock end-to-end run
-
-# try it on any React app (Next.js or Vite), no API keys needed:
-cd /path/to/your/app
-crit review --mock-ai
-
-# the real thing:
-export OPENAI_API_KEY=...      # speech-to-text (whisper)
-export ANTHROPIC_API_KEY=...   # transcript merge (optional; falls back to OpenAI)
-crit review --source . --json
-```
-
-API keys resolve from the calling environment first (so an agent's shell env just works), then
-from the reviewed project's `.env`/`.env.local` — only `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`,
-and `CRIT_*` are read from there; the rest of the project's secrets are never touched.
-
-The CLI blocks until you finish (or cancel) the review in the browser, then prints the final
-transcript — plain Markdown by default, or a single machine-readable JSON object with `--json`.
-
-## For agents
-
-Give your agent a tool/slash command that runs:
-
-```bash
-crit review --source . --json
-```
-
-A ready-made Claude Code command lives at [.claude/commands/crit.md](.claude/commands/crit.md)
-(`/crit`). Copy it to `~/.claude/commands/` to use it in every project. The JSON result contains
-`final_transcript` (Markdown), plus paths to structured artifacts (`review.json` has the issue
-list and timeline with timestamps, URLs, and source anchors).
+Plus structured issues and follow-ups an agent can act on directly, and a verbatim
+speech-plus-pointer transcript with no AI rewriting as ground truth. Because Crit runs your
+app through the [ion compiler](ion-compiler-export/PROMPT.md), every element you point at is
+annotated with its exact source location.
 
 ## How it works
 
@@ -86,8 +103,7 @@ crit review
 ```
 
 Full details — CLI flags, env vars, artifact formats, error codes, privacy model, limitations —
-are in **[docs/crit.md](docs/crit.md)**. The compiler/mirroring system that powers the source
-annotations is documented in **[ion-compiler-export/PROMPT.md](ion-compiler-export/PROMPT.md)**.
+are in **[docs/crit.md](docs/crit.md)**.
 
 ## Privacy
 
@@ -115,7 +131,8 @@ crit review --source test/fixtures/demo-app --mock-ai --no-open --json
 ```
 
 Mock providers (`--mock-ai`) make the whole loop runnable headlessly; the e2e tests drive the
-collector over HTTP exactly like the browser widget does.
+collector over HTTP exactly like the browser widget does. See
+[CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## License
 
