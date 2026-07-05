@@ -13,6 +13,7 @@ const { loadProjectEnv } = require('./env');
 const { makeSessionId, createSessionDirs } = require('./session');
 const { mirrorApp, provisionNodeModules, linkEnvFiles, injectOverlay } = require('./mirror');
 const { startAppRunner } = require('./runner');
+const { createReviewProxy } = require('./proxy');
 const { createCollector } = require('./collector');
 const { processSession } = require('./pipeline');
 const { createSttProvider } = require('./providers/stt');
@@ -92,8 +93,10 @@ async function runReview(args) {
 
   let runner = null;
   let collector = null;
+  let proxy = null;
   const cleanup = async () => {
     try { if (runner) runner.stop(); } catch { /* ignore */ }
+    try { if (proxy) await proxy.close(); } catch { /* ignore */ }
     try { if (collector) await collector.close(); } catch { /* ignore */ }
     if (!args.keepTemp) {
       try {
@@ -115,12 +118,14 @@ async function runReview(args) {
     linkEnvFiles({ sourceDir, mirrorDir: dirs.mirrorDir });
 
     // 2. Ports + overlay config
-    // The app port defaults to a STABLE port (not random): browser permissions
-    // are scoped per origin incl. port, so a stable port means the user's
-    // one-time mic "Allow" persists across sessions instead of re-prompting
-    // every time (repeated prompts trigger Chrome's silent auto-block).
+    // The browser talks to a review proxy on a STABLE port: permissions are
+    // scoped per origin incl. port, so a stable port means the user's one-time
+    // mic "Allow" persists across sessions. The proxy also strips headers that
+    // would break the review (Permissions-Policy microphone=(), CSP). The app
+    // dev server itself runs on an internal random port behind it.
     const collectorPort = await findFreePort();
-    const appPort = await findFreePort(args.port || 4747);
+    const publicPort = await findFreePort(args.port || 4747);
+    const appPort = await findFreePort();
     const collectorUrl = `http://127.0.0.1:${collectorPort}`;
     injectOverlay({
       mirrorDir: dirs.mirrorDir,
@@ -147,11 +152,15 @@ async function runReview(args) {
     await collector.listen(collectorPort);
     log(`collector listening at ${collectorUrl}`);
 
-    // 5. App runner
+    // 5. App runner (internal port) + review proxy (public, stable port)
     runner = await startAppRunner({ appDir: dirs.mirrorDir, port: appPort });
+    proxy = createReviewProxy({ targetPort: appPort });
+    await proxy.listen(publicPort);
+    const publicUrl = `http://localhost:${publicPort}`;
+    log(`review proxy at ${publicUrl} → app :${appPort} (permissions/CSP headers stripped)`);
 
     // 6. Browser — land the reviewer on the page the agent asked for
-    const reviewUrl = runner.url + (args.openPath && args.openPath !== '/' ? args.openPath : '');
+    const reviewUrl = publicUrl + (args.openPath && args.openPath !== '/' ? args.openPath : '');
     if (args.open) {
       log(`opening browser at ${reviewUrl}`);
       if (!openBrowser(reviewUrl)) log(`could not open a browser — visit ${reviewUrl} manually`);
@@ -185,7 +194,7 @@ async function runReview(args) {
       status: done.outcome,
       source_dir: sourceDir,
       temp_dir: dirs.mirrorDir,
-      app_url: runner.url,
+      app_url: `http://localhost:${publicPort}`,
       started_at: done.startedAt || null,
       completed_at: completedAt,
       duration_ms: done.durationMs || 0,
