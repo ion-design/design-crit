@@ -28,7 +28,9 @@ async function findFreePort(preferred) {
     const srv = net.createServer();
     srv.unref();
     srv.on('error', reject);
-    srv.listen(0, '127.0.0.1', () => {
+    // no host → dual-stack bind, so we don't claim a port an IPv6-bound
+    // dev server (e.g. `next dev`) is already holding
+    srv.listen(0, () => {
       const port = srv.address().port;
       srv.close(() => resolve(port));
     });
@@ -40,7 +42,7 @@ function isPortFree(port) {
     const srv = net.createServer();
     srv.unref();
     srv.on('error', () => resolve(false));
-    srv.listen(port, '127.0.0.1', () => {
+    srv.listen(port, () => {
       srv.close(() => resolve(true));
     });
   });
