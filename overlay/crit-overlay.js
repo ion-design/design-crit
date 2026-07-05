@@ -360,7 +360,8 @@
       .catch(function (err) {
         console.warn('[Crit] failed to start recording:', err);
         if (err && (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError')) {
-          errorMessage = 'Microphone permission denied.';
+          errorMessage =
+            'Microphone blocked. If no prompt appeared, click the mic/tune icon in the address bar (or the lock icon) → allow microphone, then Try Again.';
         } else if (err && err.name === 'NotFoundError') {
           errorMessage = 'No microphone found.';
         } else {
@@ -493,6 +494,7 @@
     '.crit.recording .dot { background: #ff4d5e; box-shadow: 0 0 10px rgba(255,77,94,0.8); animation: crit-pulse 1.2s infinite; }',
     '@keyframes crit-pulse { 0%,100% { opacity: 1; } 50% { opacity: .35; } }',
     '.crit .label { font-size: 13px; line-height: 1.3; white-space: nowrap; max-width: 340px; overflow: hidden; text-overflow: ellipsis; }',
+    '.crit .label.wrap { white-space: normal; max-width: 380px; overflow: visible; }',
     '.crit .time { font-variant-numeric: tabular-nums; font-size: 13px; color: rgba(242,244,248,0.65); }',
     '.crit button, .crit-src button { all: unset; cursor: pointer; font-size: 13px; font-weight: 600; padding: 6px 12px;',
     '  border-radius: 10px; background: rgba(255,255,255,0.10); color: #f2f4f8; white-space: nowrap;',
@@ -608,7 +610,7 @@
         break;
       }
       case 'error': {
-        box.appendChild(el('div', 'label', errorMessage || 'Something went wrong.'));
+        box.appendChild(el('div', 'label wrap', errorMessage || 'Something went wrong.'));
         box.appendChild(button('Try Again', 'primary', function () {
           micDisabled = false;
           startRecording();

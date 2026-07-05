@@ -115,8 +115,12 @@ async function runReview(args) {
     linkEnvFiles({ sourceDir, mirrorDir: dirs.mirrorDir });
 
     // 2. Ports + overlay config
+    // The app port defaults to a STABLE port (not random): browser permissions
+    // are scoped per origin incl. port, so a stable port means the user's
+    // one-time mic "Allow" persists across sessions instead of re-prompting
+    // every time (repeated prompts trigger Chrome's silent auto-block).
     const collectorPort = await findFreePort();
-    const appPort = await findFreePort(args.port || undefined);
+    const appPort = await findFreePort(args.port || 4747);
     const collectorUrl = `http://127.0.0.1:${collectorPort}`;
     injectOverlay({
       mirrorDir: dirs.mirrorDir,

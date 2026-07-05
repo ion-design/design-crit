@@ -21,7 +21,8 @@ Review options:
   --path <route>           Page to open for the review, e.g. /dashboard (default: /)
   --out <path>             Artifacts directory (default: <source>/.crit/reviews)
   --temp-dir <path>        Explicit temp dir for the mirrored app (default: OS temp)
-  --port <number>          Preferred app port (auto-picked if busy)
+  --port <number>          App port (default: 4747, auto-picks if busy — stable so the
+                           browser's mic permission persists across sessions)
   --no-open                Do not open the browser automatically
   --json                   Print machine-readable JSON to stdout
   --keep-temp              Keep the temp mirror after completion
