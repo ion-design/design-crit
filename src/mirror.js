@@ -42,28 +42,67 @@ async function mirrorApp({ sourceDir, mirrorDir }) {
  * - darwin: APFS copy-on-write clone (fast, real directory — Turbopack-safe)
  * - other platforms: symlink
  * - install=true: real package-manager install (copies lockfile first)
+ *
+ * Workspaces: every node_modules dir near the top of the tree (root plus
+ * nested ones in workspace packages, e.g. apps/web/node_modules) is
+ * provisioned at the same relative path, so hoisted deps and per-package
+ * binaries both resolve in the mirror.
  */
 function provisionNodeModules({ sourceDir, mirrorDir, install }) {
-  const srcModules = path.join(sourceDir, 'node_modules');
-  const dstModules = path.join(mirrorDir, 'node_modules');
-  if (fs.existsSync(dstModules)) return 'existing';
+  if (fs.existsSync(path.join(mirrorDir, 'node_modules'))) return 'existing';
 
   if (install) {
     return installDependencies({ sourceDir, mirrorDir });
   }
 
-  if (!fs.existsSync(srcModules)) {
+  const moduleDirs = findNodeModulesDirs(sourceDir, 3);
+  if (moduleDirs.length === 0) {
     log('source has no node_modules — running install in the mirror');
     return installDependencies({ sourceDir, mirrorDir });
   }
 
-  if (process.platform === 'darwin') {
-    const res = spawnSync('cp', ['-c', '-R', srcModules, dstModules], { stdio: 'ignore' });
-    if (res.status === 0) return 'cloned';
-    log('APFS clone failed, falling back to symlink');
+  let mode = null;
+  for (const src of moduleDirs) {
+    const rel = path.relative(sourceDir, src);
+    const dst = path.join(mirrorDir, rel);
+    if (fs.existsSync(dst)) continue;
+    fs.mkdirSync(path.dirname(dst), { recursive: true });
+    if (process.platform === 'darwin') {
+      const res = spawnSync('cp', ['-c', '-R', src, dst], { stdio: 'ignore' });
+      if (res.status === 0) {
+        mode = mode || 'cloned';
+        continue;
+      }
+      log(`APFS clone failed for ${rel}, falling back to symlink`);
+    }
+    fs.symlinkSync(src, dst, 'junction');
+    mode = mode || 'symlinked';
   }
-  fs.symlinkSync(srcModules, dstModules, 'junction');
-  return 'symlinked';
+  return `${mode || 'existing'} (${moduleDirs.length} dir${moduleDirs.length === 1 ? '' : 's'})`;
+}
+
+/** Find node_modules dirs up to `maxDepth` levels down, without descending into them. */
+function findNodeModulesDirs(rootDir, maxDepth) {
+  const found = [];
+  const skip = new Set(['.git', '.next', '.turbo', 'dist', 'build', '.cache', '.vercel', '.output']);
+  (function walk(dir, depth) {
+    let entries;
+    try {
+      entries = fs.readdirSync(dir, { withFileTypes: true });
+    } catch {
+      return;
+    }
+    for (const e of entries) {
+      if (!e.isDirectory() || e.isSymbolicLink()) continue;
+      if (e.name === 'node_modules') {
+        found.push(path.join(dir, e.name));
+        continue; // never descend into node_modules
+      }
+      if (skip.has(e.name) || e.name.startsWith('.')) continue;
+      if (depth < maxDepth) walk(path.join(dir, e.name), depth + 1);
+    }
+  })(rootDir, 1);
+  return found;
 }
 
 function installDependencies({ sourceDir, mirrorDir }) {

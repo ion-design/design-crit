@@ -17,7 +17,11 @@ Install options:
   --dry-run                Show what would be installed without writing
 
 Review options:
-  --source <path>          Source project directory (default: cwd)
+  --source <path>          Source project directory (default: cwd). In a monorepo, point this
+                           at the app package — crit mirrors the enclosing workspace root
+                           automatically so workspace deps resolve.
+  --app-dir <path>         Monorepo mode: app package to run, relative to --source (which
+                           should then be the workspace root), e.g. --app-dir apps/web
   --path <route>           Page to open for the review, e.g. /dashboard (default: /)
   --out <path>             Artifacts directory (default: <source>/.crit/reviews)
   --temp-dir <path>        Explicit temp dir for the mirrored app (default: OS temp)
@@ -41,6 +45,7 @@ function parseCliArgs(argv) {
     allowPositionals: true,
     options: {
       source: { type: 'string' },
+      'app-dir': { type: 'string' },
       path: { type: 'string' },
       out: { type: 'string' },
       'temp-dir': { type: 'string' },
@@ -100,6 +105,7 @@ function parseCliArgs(argv) {
   return {
     command: 'review',
     source,
+    appDir: values['app-dir'] || null,
     openPath,
     out: values.out || null, // resolved against source later
     tempDir: values['temp-dir'] || null,

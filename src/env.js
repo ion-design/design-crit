@@ -65,4 +65,23 @@ function loadProjectEnv(sourceDir, env = process.env) {
   return applied;
 }
 
-module.exports = { loadProjectEnv, parseEnvFile };
+/**
+ * Read ALL vars from a directory's .env/.env.local (later overrides earlier)
+ * WITHOUT mutating anything. Used to feed a monorepo app's dev server the
+ * workspace-root env its own dev script would normally inject
+ * (e.g. `dotenv -e ../../.env -- next dev`). These values go to the user's
+ * own app process, never to crit's AI providers.
+ */
+function loadEnvFileVars(dir) {
+  const out = {};
+  for (const name of ['.env', '.env.local']) {
+    try {
+      Object.assign(out, parseEnvFile(fs.readFileSync(path.join(dir, name), 'utf-8')));
+    } catch {
+      /* missing file is fine */
+    }
+  }
+  return out;
+}
+
+module.exports = { loadProjectEnv, loadEnvFileVars, parseEnvFile };

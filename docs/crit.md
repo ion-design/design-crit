@@ -48,6 +48,11 @@ crit review --source . --mock-ai --no-open
 
 ```
 --source <path>          Source project directory. Default: current working directory.
+                         In a monorepo, point at the app package — the enclosing workspace
+                         root is detected and mirrored automatically.
+--app-dir <path>         Monorepo: app package relative to --source (when --source is the
+                         workspace root), e.g. --app-dir apps/web. On an ambiguous root,
+                         crit errors with MONOREPO_APP_AMBIGUOUS and lists candidates.
 --path <route>           App route to open for the review, e.g. /dashboard. Default: /.
 --out <path>             Directory for final review artifacts. Default: <source>/.crit/reviews.
 --temp-dir <path>        Optional explicit temp dir. Default: OS temp dir.
@@ -129,7 +134,16 @@ Cancelled sessions return `{"status": "cancelled", "reason": "user_cancelled"}`;
 `{"status": "error", "error": {"code", "message"}, "artifacts": {...partial...}}`.
 
 Error codes: `MIRROR_FAILED`, `TEMP_DIR_FAILED`, `INSTALL_FAILED`, `APP_START_FAILED`,
-`STT_FAILED`, `MERGE_FAILED`, `PROCESSING_FAILED`, `INTERNAL_ERROR`.
+`APP_DIR_INVALID`, `MONOREPO_APP_AMBIGUOUS`, `STT_FAILED`, `MERGE_FAILED`,
+`PROCESSING_FAILED`, `INTERNAL_ERROR`.
+
+### Monorepos
+
+Crit mirrors the **whole workspace** (so hoisted `node_modules` and `workspace:` packages
+resolve) and runs the dev server from the app package. All node_modules directories near the
+top of the tree are cloned to their same relative paths, and the workspace root's `.env` is
+fed to the app's dev server (matching `dotenv -e ../../.env`-style dev scripts). Sibling
+services the app talks to (API servers) are not started by crit — run those yourself.
 
 ## Artifacts
 

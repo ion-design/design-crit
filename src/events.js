@@ -24,13 +24,14 @@ const KNOWN_TYPES = new Set([
 ]);
 
 const MOVE_GAP_MS = 1500;
-// A continuous movement cluster is also flushed after this long, so hover
-// context stays time-aligned with the speech transcript (one 15s cluster
-// would bury which element was hovered while a given sentence was spoken).
-const MOVE_CLUSTER_MAX_MS = 1000;
+// Pointer clusters are sampled at 250ms so hover context is tracked ~4×/sec
+// and stays tightly time-aligned with the speech transcript. Consecutive
+// clusters over the same target are merged afterwards, so granularity does
+// not translate into timeline noise.
+const MOVE_CLUSTER_MAX_MS = 250;
 const SCROLL_GAP_MS = 1500;
 const JITTER_DISTANCE_PX = 20;
-const PAUSE_DISTANCE_PX = 60;
+const PAUSE_SPEED_PX_PER_SEC = 80;
 const PAUSE_MIN_MS = 800;
 const MIN_SCROLL_DELTA_PX = 40;
 
@@ -220,36 +221,24 @@ function condenseEvents(events) {
   }
   flushAll();
   entries.sort((a, b) => a.start_ms - b.start_ms);
-
-  // Merge consecutive pointer entries with identical text (a dwell split by
-  // the cluster time cap) into one entry spanning the whole period.
-  const merged = [];
-  for (const e of entries) {
-    const prev = merged[merged.length - 1];
-    if (
-      prev &&
-      prev.kind === 'pointer' &&
-      e.kind === 'pointer' &&
-      prev.text === e.text &&
-      e.start_ms - prev.end_ms <= MOVE_GAP_MS
-    ) {
-      prev.end_ms = Math.max(prev.end_ms, e.end_ms);
-    } else {
-      merged.push(e);
-    }
-  }
-  return merged;
+  return finalizePointerEntries(entries);
 }
 
 function entry(ev, kind, text) {
   return { start_ms: ev.timestamp_ms, end_ms: ev.timestamp_ms, kind, text, url: ev.pathname || ev.url || null };
 }
 
+/**
+ * Summarize one raw pointer cluster (≤ MOVE_CLUSTER_MAX_MS) into an
+ * intermediate entry. Text is generated later, after consecutive clusters
+ * over the same target(s) have been merged — a labeled hover is NEVER
+ * dropped, even when the pointer barely moves (slow deliberate pointing is
+ * exactly how users indicate elements).
+ */
 function summarizeMoves(buffer) {
   if (buffer.length === 0) return null;
   const first = buffer[0];
   const last = buffer[buffer.length - 1];
-  const duration = last.timestamp_ms - first.timestamp_ms;
 
   let distance = 0;
   for (let i = 1; i < buffer.length; i++) {
@@ -259,25 +248,79 @@ function summarizeMoves(buffer) {
       distance += Math.hypot(b.x - a.x, b.y - a.y);
     }
   }
-  if (distance < JITTER_DISTANCE_PX && duration < PAUSE_MIN_MS) return null; // jitter
 
   const labels = [];
   for (const ev of buffer) {
     const l = targetLabel(ev.target);
     if (l && !labels.includes(l)) labels.push(l);
   }
-  const interesting = labels.filter((l) => !/^(element|div|span|section|main|body)/.test(l)).slice(0, 3);
+  const interesting = labels.filter((l) => !/^(element|div|span|section|main|body|html)/.test(l));
+  const useLabels = interesting.length > 0 ? interesting : labels.slice(0, 1);
 
-  let text;
-  if (distance < PAUSE_DISTANCE_PX && duration >= PAUSE_MIN_MS) {
-    const near = interesting[interesting.length - 1] || labels[labels.length - 1];
-    text = near ? `Pointer pauses near ${near}` : `Pointer pauses ${regionOf(last)}`;
-  } else if (interesting.length > 0) {
-    text = `Pointer moves over ${interesting.join(', ')}`;
-  } else {
-    text = `Pointer moves around ${regionOf(last)}`;
+  return {
+    start_ms: first.timestamp_ms,
+    end_ms: last.timestamp_ms,
+    kind: 'pointer',
+    labels: useLabels.slice(0, 4),
+    distance,
+    region: regionOf(last),
+    lastX: typeof last.x === 'number' ? last.x : null,
+    lastY: typeof last.y === 'number' ? last.y : null,
+    firstX: typeof first.x === 'number' ? first.x : null,
+    firstY: typeof first.y === 'number' ? first.y : null,
+    url: last.pathname || null,
+  };
+}
+
+/**
+ * Merge consecutive pointer clusters over the same target set, then render
+ * text: long slow contact becomes "pauses near", the rest "moves over".
+ * Unlabeled micro-movement is dropped as jitter; labeled hovers are kept.
+ */
+function finalizePointerEntries(entries) {
+  const merged = [];
+  for (const e of entries) {
+    const prev = merged[merged.length - 1];
+    if (
+      prev &&
+      prev.kind === 'pointer' &&
+      e.kind === 'pointer' &&
+      prev.labels.join('|') === e.labels.join('|') &&
+      e.start_ms - prev.end_ms <= MOVE_GAP_MS
+    ) {
+      if (prev.lastX != null && e.firstX != null) {
+        prev.distance += Math.hypot(e.firstX - prev.lastX, e.firstY - prev.lastY);
+      }
+      prev.distance += e.distance;
+      prev.end_ms = Math.max(prev.end_ms, e.end_ms);
+      prev.lastX = e.lastX;
+      prev.lastY = e.lastY;
+      prev.region = e.region;
+    } else {
+      merged.push(e);
+    }
   }
-  return { start_ms: first.timestamp_ms, end_ms: last.timestamp_ms, kind: 'pointer', text, url: last.pathname || null };
+
+  const out = [];
+  for (const e of merged) {
+    if (e.kind !== 'pointer') {
+      out.push(e);
+      continue;
+    }
+    const duration = e.end_ms - e.start_ms;
+    const speed = duration > 0 ? (e.distance / duration) * 1000 : 0;
+    let text;
+    if (e.labels.length === 0) {
+      if (e.distance < JITTER_DISTANCE_PX && duration < PAUSE_MIN_MS) continue; // unlabeled jitter
+      text = `Pointer moves around ${e.region}`;
+    } else if (duration >= PAUSE_MIN_MS && speed < PAUSE_SPEED_PX_PER_SEC && e.labels.length === 1) {
+      text = `Pointer pauses near ${e.labels[0]}`;
+    } else {
+      text = `Pointer ${e.labels.length === 1 && e.distance < JITTER_DISTANCE_PX ? 'hovers over' : 'moves over'} ${e.labels.join(', ')}`;
+    }
+    out.push({ start_ms: e.start_ms, end_ms: e.end_ms, kind: 'pointer', text, url: e.url });
+  }
+  return out;
 }
 
 function regionOf(ev) {

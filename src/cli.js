@@ -9,11 +9,12 @@
 const fs = require('fs');
 const path = require('path');
 const { parseCliArgs, resolveProviders } = require('./args');
-const { loadProjectEnv } = require('./env');
+const { loadProjectEnv, loadEnvFileVars } = require('./env');
 const { makeSessionId, createSessionDirs } = require('./session');
 const { mirrorApp, provisionNodeModules, linkEnvFiles, injectOverlay } = require('./mirror');
 const { startAppRunner } = require('./runner');
 const { createReviewProxy } = require('./proxy');
+const { isWorkspaceRoot, findEnclosingWorkspaceRoot, listWorkspaceApps } = require('./workspace');
 const { createCollector } = require('./collector');
 const { processSession } = require('./pipeline');
 const { createSttProvider } = require('./providers/stt');
@@ -76,20 +77,62 @@ async function runReview(args) {
     return fail(args, sessionId, 'MIRROR_FAILED', `No package.json found in ${sourceDir} — is it an app directory?`);
   }
 
+  // Monorepo resolution: mirror the whole workspace (so workspace packages
+  // and hoisted node_modules resolve) but run the dev server from the app
+  // package. Three ways in:
+  //   --source <root> --app-dir apps/web    explicit
+  //   --source <root-with-workspaces>       auto-pick if exactly one app
+  //   --source <app-inside-workspace>       enclosing root auto-detected
+  let mirrorSourceDir = sourceDir;
+  let appDirRel = '.';
+  if (args.appDir) {
+    appDirRel = args.appDir;
+    if (!fs.existsSync(path.join(sourceDir, appDirRel, 'package.json'))) {
+      return fail(args, sessionId, 'APP_DIR_INVALID', `--app-dir "${appDirRel}" has no package.json under ${sourceDir}`);
+    }
+  } else if (isWorkspaceRoot(sourceDir)) {
+    const apps = listWorkspaceApps(sourceDir);
+    if (apps.length === 1) {
+      appDirRel = apps[0].rel;
+      log(`monorepo: auto-selected app package ${appDirRel} (${apps[0].name})`);
+    } else if (apps.length > 1) {
+      return fail(
+        args,
+        sessionId,
+        'MONOREPO_APP_AMBIGUOUS',
+        `${sourceDir} is a workspace root with multiple app packages. Rerun with --app-dir <one of: ${apps
+          .map((a) => a.rel)
+          .join(', ')}>`
+      );
+    }
+  } else {
+    const wsRoot = findEnclosingWorkspaceRoot(sourceDir);
+    if (wsRoot) {
+      mirrorSourceDir = wsRoot;
+      appDirRel = path.relative(wsRoot, sourceDir);
+      log(`monorepo: mirroring workspace root ${wsRoot}, app package ${appDirRel}`);
+    }
+  }
+
   // Top up crit's env (API keys, CRIT_* settings) from the project's .env
-  // files — the calling process env always wins. Never log the values.
-  const appliedEnv = loadProjectEnv(sourceDir);
+  // files (app package first, then workspace root) — the calling process env
+  // always wins. Never log the values.
+  const appliedEnv = [
+    ...loadProjectEnv(path.join(mirrorSourceDir, appDirRel)),
+    ...(mirrorSourceDir !== sourceDir || appDirRel !== '.' ? loadProjectEnv(mirrorSourceDir) : []),
+  ];
   if (appliedEnv.length > 0) log(`loaded from project .env: ${appliedEnv.join(', ')}`);
   const providerConfig = resolveProviders(args);
 
   let dirs;
   try {
-    dirs = createSessionDirs({ sessionId, sourceDir, outDir, tempDir: args.tempDir });
+    dirs = createSessionDirs({ sessionId, sourceDir: mirrorSourceDir, outDir, tempDir: args.tempDir });
   } catch (e) {
     return fail(args, sessionId, 'TEMP_DIR_FAILED', `Could not create session directories: ${e.message}`);
   }
+  const appMirrorDir = path.join(dirs.mirrorDir, appDirRel);
   log(`session ${sessionId}`);
-  log(`mirroring ${sourceDir} → ${dirs.mirrorDir}`);
+  log(`mirroring ${mirrorSourceDir} → ${dirs.mirrorDir}`);
 
   let runner = null;
   let collector = null;
@@ -110,12 +153,15 @@ async function runReview(args) {
   };
 
   try {
-    // 1. Mirror the app through the ion compiler pipeline
-    const mirrorResult = await mirrorApp({ sourceDir, mirrorDir: dirs.mirrorDir });
+    // 1. Mirror the app (or whole workspace) through the ion compiler pipeline
+    const mirrorResult = await mirrorApp({ sourceDir: mirrorSourceDir, mirrorDir: dirs.mirrorDir });
     log(`mirrored: ${mirrorResult.processed} transformed, ${mirrorResult.copied} copied`);
-    const nmMode = provisionNodeModules({ sourceDir, mirrorDir: dirs.mirrorDir, install: args.install });
+    const nmMode = provisionNodeModules({ sourceDir: mirrorSourceDir, mirrorDir: dirs.mirrorDir, install: args.install });
     log(`node_modules: ${nmMode}`);
-    linkEnvFiles({ sourceDir, mirrorDir: dirs.mirrorDir });
+    linkEnvFiles({ sourceDir: mirrorSourceDir, mirrorDir: dirs.mirrorDir });
+    if (appDirRel !== '.') {
+      linkEnvFiles({ sourceDir: path.join(mirrorSourceDir, appDirRel), mirrorDir: appMirrorDir });
+    }
 
     // 2. Ports + overlay config
     // The browser talks to a review proxy on a STABLE port: permissions are
@@ -128,7 +174,7 @@ async function runReview(args) {
     const appPort = await findFreePort();
     const collectorUrl = `http://127.0.0.1:${collectorPort}`;
     injectOverlay({
-      mirrorDir: dirs.mirrorDir,
+      mirrorDir: appMirrorDir,
       config: { sessionId, collectorUrl, recordingEnabled: true },
     });
 
@@ -153,7 +199,10 @@ async function runReview(args) {
     log(`collector listening at ${collectorUrl}`);
 
     // 5. App runner (internal port) + review proxy (public, stable port)
-    runner = await startAppRunner({ appDir: dirs.mirrorDir, port: appPort });
+    // In a monorepo, hand the app the workspace-root .env its own dev script
+    // would normally inject (e.g. `dotenv -e ../../.env -- next dev`).
+    const extraEnv = appDirRel !== '.' ? loadEnvFileVars(mirrorSourceDir) : {};
+    runner = await startAppRunner({ appDir: appMirrorDir, port: appPort, extraEnv });
     proxy = createReviewProxy({ targetPort: appPort });
     await proxy.listen(publicPort);
     const publicUrl = `http://localhost:${publicPort}`;
@@ -193,6 +242,8 @@ async function runReview(args) {
       session_id: sessionId,
       status: done.outcome,
       source_dir: sourceDir,
+      workspace_root: mirrorSourceDir !== sourceDir ? mirrorSourceDir : undefined,
+      app_dir: appDirRel !== '.' ? appDirRel : undefined,
       temp_dir: dirs.mirrorDir,
       app_url: `http://localhost:${publicPort}`,
       started_at: done.startedAt || null,

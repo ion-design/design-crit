@@ -43,6 +43,19 @@ particular route (e.g. you just changed the checkout flow) — pass `--path`:
 crit review --source . --json --path /checkout
 ```
 
+**Monorepos:** point `--source` at the app package, not the workspace root — crit detects the
+enclosing workspace automatically, mirrors the whole repo, and runs the dev server from the app:
+
+```bash
+crit review --source apps/web --json
+# equivalently: crit review --source . --app-dir apps/web --json
+```
+
+If you run it on a workspace root with several apps, it exits with
+`MONOREPO_APP_AMBIGUOUS` and lists the candidate app dirs — pick the one the user's feedback
+concerns and rerun with `--app-dir`. If the app depends on sibling services (an API server),
+make sure those are already running; crit only starts the app's own dev server.
+
 ## 4. Consume the result
 
 stdout is a single JSON object:

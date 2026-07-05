@@ -21,13 +21,28 @@ function detectFramework(appDir) {
   return { kind: 'unknown', pkg };
 }
 
+/**
+ * Find a package binary, walking up from the app dir — in hoisted workspaces
+ * the .bin lives at the workspace root, not next to the app package.
+ */
+function findBin(appDir, name) {
+  let dir = path.resolve(appDir);
+  let prev = null;
+  while (dir !== prev) {
+    const candidate = path.join(dir, 'node_modules', '.bin', name);
+    if (fs.existsSync(candidate)) return candidate;
+    prev = dir;
+    dir = path.dirname(dir);
+  }
+  return name; // hope it's on PATH
+}
+
 function commandFor(kind, appDir, port) {
-  const bin = (name) => path.join(appDir, 'node_modules', '.bin', name);
   switch (kind) {
     case 'next':
-      return { cmd: bin('next'), args: ['dev', '-p', String(port)] };
+      return { cmd: findBin(appDir, 'next'), args: ['dev', '-p', String(port)] };
     case 'vite':
-      return { cmd: bin('vite'), args: ['--port', String(port), '--strictPort'] };
+      return { cmd: findBin(appDir, 'vite'), args: ['--port', String(port), '--strictPort'] };
     case 'script':
       return { cmd: 'npm', args: ['run', 'dev'] };
     default:
@@ -39,7 +54,7 @@ function commandFor(kind, appDir, port) {
  * Start the dev server for the mirrored app. Resolves once HTTP responds.
  * Returns { proc, url, stop() }.
  */
-async function startAppRunner({ appDir, port, timeoutMs = 120000 }) {
+async function startAppRunner({ appDir, port, timeoutMs = 120000, extraEnv = {} }) {
   const { kind } = detectFramework(appDir);
   const command = commandFor(kind, appDir, port);
   if (!command) {
@@ -52,7 +67,8 @@ async function startAppRunner({ appDir, port, timeoutMs = 120000 }) {
   const outputTail = [];
   const proc = spawn(command.cmd, command.args, {
     cwd: appDir,
-    env: { ...process.env, PORT: String(port), BROWSER: 'none', FORCE_COLOR: '0' },
+    // extraEnv first: real environment wins over .env-file values (dotenv semantics)
+    env: { ...extraEnv, ...process.env, PORT: String(port), BROWSER: 'none', FORCE_COLOR: '0' },
     stdio: ['ignore', 'pipe', 'pipe'],
     detached: process.platform !== 'win32',
   });
@@ -62,6 +78,11 @@ async function startAppRunner({ appDir, port, timeoutMs = 120000 }) {
   proc.on('exit', (code, signal) => {
     exited = true;
     exitInfo = { code, signal };
+  });
+  proc.on('error', (err) => {
+    exited = true;
+    exitInfo = { code: null, signal: null, spawnError: err.message };
+    outputTail.push(`spawn failed: ${err.message}\n`);
   });
   const capture = (chunk) => {
     const text = chunk.toString();
