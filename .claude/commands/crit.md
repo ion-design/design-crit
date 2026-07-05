@@ -12,8 +12,10 @@ their browser — this can take several minutes, so use a long timeout):
 crit review --source . --json
 ```
 
-(`crit` comes from `npm link` in the crit repo; if it is not on PATH, run
-`node <path-to-crit-repo>/bin/crit.js review --source . --json` instead.)
+Add `--path /some/route` to land the reviewer on a specific page (do this when the feedback
+you want concerns a particular route you just worked on).
+
+(`crit` comes from `npm i -g design-crit`; if it is not on PATH, use `npx -y design-crit`.)
 
 Notes:
 - The user's browser opens automatically to a mirrored copy of the app with a recording widget.

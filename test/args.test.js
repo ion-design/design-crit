@@ -44,6 +44,14 @@ test('--mock-ai forces mock providers', () => {
   assert.equal(a.mockAi, true);
 });
 
+test('--path parses and normalizes', () => {
+  assert.equal(parseCliArgs(['review']).openPath, '/');
+  assert.equal(parseCliArgs(['review', '--path', '/dashboard']).openPath, '/dashboard');
+  assert.equal(parseCliArgs(['review', '--path', 'checkout?step=2']).openPath, '/checkout?step=2');
+  assert.throws(() => parseCliArgs(['review', '--path', 'https://evil.com']));
+  assert.throws(() => parseCliArgs(['review', '--path', '//evil.com']));
+});
+
 test('invalid port throws', () => {
   assert.throws(() => parseCliArgs(['review', '--port', 'abc']));
   assert.throws(() => parseCliArgs(['review', '--port', '99999']));

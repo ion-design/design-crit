@@ -48,6 +48,7 @@ crit review --source . --mock-ai --no-open
 
 ```
 --source <path>          Source project directory. Default: current working directory.
+--path <route>           App route to open for the review, e.g. /dashboard. Default: /.
 --out <path>             Directory for final review artifacts. Default: <source>/.crit/reviews.
 --temp-dir <path>        Optional explicit temp dir. Default: OS temp dir.
 --port <number>          Preferred local app port. Auto-picked if unavailable.

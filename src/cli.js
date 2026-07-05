@@ -146,12 +146,13 @@ async function runReview(args) {
     // 5. App runner
     runner = await startAppRunner({ appDir: dirs.mirrorDir, port: appPort });
 
-    // 6. Browser
+    // 6. Browser — land the reviewer on the page the agent asked for
+    const reviewUrl = runner.url + (args.openPath && args.openPath !== '/' ? args.openPath : '');
     if (args.open) {
-      log(`opening browser at ${runner.url}`);
-      if (!openBrowser(runner.url)) log(`could not open a browser — visit ${runner.url} manually`);
+      log(`opening browser at ${reviewUrl}`);
+      if (!openBrowser(reviewUrl)) log(`could not open a browser — visit ${reviewUrl} manually`);
     } else {
-      log(`open ${runner.url} to start the review`);
+      log(`open ${reviewUrl} to start the review`);
     }
     log('waiting for the user to complete the Crit review (Ctrl+C to cancel)...');
 

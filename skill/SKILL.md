@@ -36,6 +36,13 @@ Then run (long timeout — the command blocks while the user reviews, often seve
 crit review --source . --json
 ```
 
+To land the reviewer on a specific page — do this whenever the feedback you want concerns a
+particular route (e.g. you just changed the checkout flow) — pass `--path`:
+
+```bash
+crit review --source . --json --path /checkout
+```
+
 ## 4. Consume the result
 
 stdout is a single JSON object:
