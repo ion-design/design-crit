@@ -10,6 +10,7 @@
     "bin/",
     "src/",
     "overlay/",
+    "skill/",
     "ion-compiler-export/",
     "docs/",
     "README.md",

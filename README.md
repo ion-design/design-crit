@@ -7,22 +7,25 @@ widget. You narrate feedback while pointing, clicking, and navigating. The agent
 timestamped transcript where every "this" and "here" is resolved to a real element — with its
 source file, line, and React component.
 
-## How to
+## Get started
 
-### 1. Install the CLI
-
-```bash
-git clone https://github.com/ion-design/design-crit.git
-cd design-crit
-npm install
-npm link        # puts `crit` on your PATH
-```
-
-Requires Node 20+. Verify with:
+### 1. Install the skill into your agent
 
 ```bash
-crit --help
+npx design-crit install
 ```
+
+Detects your AI coding harnesses (Claude Code, Cursor, GitHub Copilot, Codex CLI) and installs
+the Crit skill into each — globally where the harness supports it, project-local otherwise.
+Requires Node 20+. Non-default targets:
+
+```bash
+npx design-crit install --providers claude,cursor --scope project
+npx design-crit install --dry-run          # see what it would do
+```
+
+That's the whole install: the skill teaches your agent to fetch the `crit` CLI itself the
+first time it needs it (`npm i -g design-crit`). To update later, rerun the same command.
 
 ### 2. Set API keys
 
@@ -38,37 +41,35 @@ You can also just put these in the reviewed project's `.env` — crit reads `OPE
 `ANTHROPIC_API_KEY`, and `CRIT_*` from there (calling env wins; no other project secrets are
 touched). No keys at all? Use `--mock-ai` to try the full loop with canned transcription.
 
-### 3. Run a review
+### 3. First run
 
-```bash
-cd /path/to/your/react-app     # Next.js or Vite (any app with a dev server works)
-crit review
-```
+Reload your agent, open any React app project (Next.js or Vite), and ask:
+
+> "Give me a crit" — or in Claude Code: `/crit`
 
 Your browser opens the mirrored app. Press **● Start Crit**, allow the microphone, and talk
 through your feedback while using your mouse as a pointer — a panel at the bottom-left shows
-the source file of whatever you're hovering. Press **■ Stop** when done. The final review
-prints to stdout and artifacts land in `.crit/reviews/<session>/`.
+the source file of whatever you're hovering. Press **■ Stop** when done. The agent receives
+the review and gets to work; artifacts land in `.crit/reviews/<session>/`.
 
-### 4. Install it into your agent
-
-**Claude Code** — copy the ready-made slash command, then type `/crit` in any project:
+You can also run it directly without an agent:
 
 ```bash
-cp .claude/commands/crit.md ~/.claude/commands/crit.md
+npm i -g design-crit
+crit review            # human-readable output; --json for machines
 ```
 
-**Any other agent** — register a tool/command that shells out to:
+<details>
+<summary>Wiring an agent by hand (no installer)</summary>
 
-```bash
-crit review --source . --json
-```
+Register a tool/command that shells out to `crit review --source . --json`. The call blocks
+until the user finishes (give it a generous timeout — reviews take minutes). stdout is one
+JSON object: on `"status": "completed"`, read `final_transcript` (Markdown) and
+`artifacts.review_json` (structured issues/timeline with timestamps, URLs, source anchors).
+`"cancelled"` means the user declined; `"error"` carries `error.code` and partial artifact
+paths. The canonical skill text lives at [skill/SKILL.md](skill/SKILL.md).
 
-The call blocks until the user finishes (give it a generous timeout — reviews take minutes).
-stdout is a single JSON object: on `"status": "completed"`, read `final_transcript` (Markdown)
-and `artifacts.review_json` (structured issues/timeline with timestamps, URLs, and source
-anchors). `"cancelled"` means the user declined; `"error"` carries `error.code` and any partial
-artifact paths.
+</details>
 
 ## What the agent gets back
 

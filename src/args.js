@@ -7,9 +7,16 @@ const { parseArgs } = require('util');
 const HELP = `crit — agent-requested app review sessions
 
 Usage:
-  crit review [options]
+  crit install [options]     Install the Crit skill into your AI coding agents
+  crit review [options]      Run a review session (usually invoked by an agent)
 
-Options:
+Install options:
+  --providers <csv>        Harnesses to install into: claude, cursor, copilot, codex.
+                           Default: every harness folder detected.
+  --scope <scope>          global | project | auto (default: auto)
+  --dry-run                Show what would be installed without writing
+
+Review options:
   --source <path>          Source project directory (default: cwd)
   --out <path>             Artifacts directory (default: <source>/.crit/reviews)
   --temp-dir <path>        Explicit temp dir for the mirrored app (default: OS temp)
@@ -44,14 +51,31 @@ function parseCliArgs(argv) {
       'merge-provider': { type: 'string' },
       'merge-model': { type: 'string' },
       'mock-ai': { type: 'boolean', default: false },
+      providers: { type: 'string' },
+      scope: { type: 'string' },
+      'dry-run': { type: 'boolean', default: false },
       help: { type: 'boolean', short: 'h', default: false },
     },
   });
 
   const command = positionals[0] || 'review';
   if (values.help) return { command: 'help', help: HELP };
+
+  if (command === 'install') {
+    const scope = values.scope || 'auto';
+    if (!['auto', 'global', 'project'].includes(scope)) {
+      throw new Error(`Invalid --scope "${scope}". Use: auto, global, or project`);
+    }
+    return {
+      command: 'install',
+      providers: values.providers ? values.providers.split(',').map((s) => s.trim()).filter(Boolean) : null,
+      scope,
+      dryRun: values['dry-run'],
+    };
+  }
+
   if (command !== 'review') {
-    throw new Error(`Unknown command "${command}". Try: crit review`);
+    throw new Error(`Unknown command "${command}". Try: crit install, crit review`);
   }
 
   let port;

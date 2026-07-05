@@ -158,12 +158,24 @@ written and the error JSON lists their paths.
   recorded. No cookies, storage, or request headers are captured.
 - Recording starts only when the user clicks Start; a pulsing red dot shows while recording.
 
-## Slash command
+## Agent integration
 
-`.claude/commands/crit.md` defines `/crit` for Claude Code. It runs
-`crit review --source . --json` (expects `crit` on PATH via `npm link`) and tells the agent how
-to consume the result. Copy it to `~/.claude/commands/crit.md` to make `/crit` available in
-every project.
+`crit install` (or `npx design-crit install`) detects your AI coding harnesses and installs
+the Crit skill into each:
+
+| Harness | Target |
+| --- | --- |
+| Claude Code | `~/.claude/skills/crit/SKILL.md` (global) or `./.claude/skills/crit/` (project) |
+| Cursor | `./.cursor/rules/crit.mdc` |
+| GitHub Copilot | `./.github/skills/crit/SKILL.md` |
+| Codex CLI | `~/.agents/skills/crit/SKILL.md` (global) or `./.agents/skills/crit/` (project) |
+
+Flags: `--providers claude,cursor,copilot,codex`, `--scope auto|global|project`, `--dry-run`.
+Auto mode only touches harnesses whose folders already exist; explicitly named providers get
+their folders created. The canonical skill text is [../skill/SKILL.md](../skill/SKILL.md) — it
+teaches the agent to install the CLI on first use, check keys, run the review, and act on the
+result. A plain `/crit` slash command also ships at `.claude/commands/crit.md` for repos that
+prefer commands over skills.
 
 ## Relationship to the ion compiler
 

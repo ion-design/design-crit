@@ -32,7 +32,38 @@ async function main(argv) {
     process.stdout.write(args.help);
     return 0;
   }
+  if (args.command === 'install') {
+    return runInstallCommand(args);
+  }
   return runReview(args);
+}
+
+function runInstallCommand(args) {
+  const { runInstall } = require('./install');
+  let installed;
+  try {
+    installed = runInstall({ providers: args.providers, scope: args.scope, dryRun: args.dryRun });
+  } catch (e) {
+    process.stderr.write(`crit: ${e.message}\n`);
+    return 1;
+  }
+  if (installed.length === 0) {
+    process.stdout.write(
+      'No agent harness folders detected (looked for ~/.claude, ~/.agents, ./.claude, ./.cursor, ./.github, ./.agents).\n' +
+        'Pick one explicitly, e.g.:  crit install --providers claude --scope global\n'
+    );
+    return 1;
+  }
+  const verb = args.dryRun ? 'Would install' : 'Installed';
+  process.stdout.write(`${verb} the Crit skill:\n\n`);
+  for (const step of installed) {
+    process.stdout.write(`  ${step.label.padEnd(16)} ${step.scope.padEnd(8)} ${step.file}\n`);
+  }
+  process.stdout.write(
+    '\nNext: reload your agent, then ask it for a review — try "give me a crit" (Claude Code: /crit).\n' +
+      'The skill installs the design-crit CLI on first use if it is missing.\n'
+  );
+  return 0;
 }
 
 async function runReview(args) {
