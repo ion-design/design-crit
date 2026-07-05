@@ -147,7 +147,10 @@ class AnthropicMergeProvider {
 class OpenAIMergeProvider {
   constructor({ model, apiKey } = {}) {
     this.name = 'openai';
-    this.model = model || 'gpt-4o-mini';
+    // gpt-4.1-mini balances merge quality and post-Stop latency (~5s);
+    // gpt-4.1-nano is faster but weaker on long reviews, gpt-5-* are
+    // reasoning models and take 15s+ for this task.
+    this.model = model || 'gpt-4.1-mini';
     this.apiKey = apiKey || process.env.OPENAI_API_KEY;
   }
 

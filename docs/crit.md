@@ -59,7 +59,7 @@ crit review --source . --mock-ai --no-open
 --stt-provider <name>    Speech-to-text provider: openai | mock.
 --stt-model <name>       Speech-to-text model (default: whisper-1).
 --merge-provider <name>  Transcript merge provider: anthropic | openai | mock.
---merge-model <name>     Merge model (default: claude-haiku-4-5 / gpt-4o-mini).
+--merge-model <name>     Merge model (default: claude-haiku-4-5 / gpt-4.1-mini).
 --mock-ai                Use mock transcription + merge for local testing.
 ```
 

@@ -26,11 +26,12 @@ crit --help
 
 ### 2. Set API keys
 
-Crit needs a speech-to-text key, and optionally an Anthropic key for the transcript merge:
+An OpenAI key alone is enough — it covers both transcription (Whisper) and the transcript
+merge (`gpt-4.1-mini`):
 
 ```bash
-export OPENAI_API_KEY=sk-...      # required: Whisper transcription
-export ANTHROPIC_API_KEY=sk-...   # optional: Claude does the merge (falls back to OpenAI)
+export OPENAI_API_KEY=sk-...      # required: Whisper STT + merge
+export ANTHROPIC_API_KEY=sk-...   # optional: if set, Claude Haiku does the merge instead
 ```
 
 You can also just put these in the reviewed project's `.env` — crit reads `OPENAI_API_KEY`,
