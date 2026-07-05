@@ -1,0 +1,8 @@
+{
+  "name": "crit-demo-app",
+  "private": true,
+  "version": "0.0.0",
+  "scripts": {
+    "dev": "node server.js"
+  }
+}

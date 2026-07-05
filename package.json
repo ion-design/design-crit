@@ -1,0 +1,20 @@
+{
+  "name": "crit",
+  "version": "0.1.0",
+  "description": "Crit — agent-requested app review sessions. Mirrors an app, records a narrated review with pointer context, returns a merged transcript.",
+  "license": "MIT",
+  "private": true,
+  "bin": {
+    "crit": "bin/crit.js"
+  },
+  "scripts": {
+    "test": "node --test 'test/*.test.js'",
+    "crit": "node bin/crit.js"
+  },
+  "dependencies": {
+    "@babel/core": "^7.26.0",
+    "@babel/plugin-syntax-jsx": "^7.25.9",
+    "@babel/preset-typescript": "^7.26.0",
+    "@babel/types": "^7.26.0"
+  }
+}
