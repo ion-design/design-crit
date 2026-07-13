@@ -8,7 +8,7 @@ single vanilla-JS file.
 
 ```bash
 npm install
-npm test          # 27 tests: unit + two end-to-end runs with mock AI providers
+npm test          # full suite: unit tests + end-to-end runs with mock AI providers
 npm link          # optional: `crit` on your PATH
 ```
 
