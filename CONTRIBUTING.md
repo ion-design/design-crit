@@ -34,8 +34,7 @@ crit review --source <app> --mock-ai --keep-temp
 - `src/providers/` — STT + merge providers; add a provider by implementing the small class
   interface and registering it in the factory
 - `overlay/crit-overlay.js` — the widget; keep it dependency-free and ES5-ish
-- `ion-compiler-export/` — the Babel annotation/mirroring pipeline (see its `PROMPT.md`);
-  changes here must stay backward-compatible (defaults preserve original behavior)
+- `ion-compiler/` — the Babel annotation/mirroring pipeline (see its `README.md`)
 
 ## Guidelines
 

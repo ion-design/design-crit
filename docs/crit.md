@@ -14,7 +14,7 @@ interaction context, then returns a merged, timestamped review transcript the ag
 ```
 crit review --source . --json
    │
-   ├─ 1. mirror the app into a temp dir (BabelProcessor from ion-compiler-export)
+   ├─ 1. mirror the app into a temp dir (BabelProcessor from ion-compiler)
    │      · every JSX element gets data-ion-* source annotations
    │      · <script src="/crit-overlay.js"> is injected (babel plugin for JSX <body>,
    │        index.html post-processing for Vite-style apps)
@@ -194,14 +194,12 @@ prefer commands over skills.
 
 ## Relationship to the ion compiler
 
-Crit reuses the ion compiler export (`ion-compiler-export/`) unchanged in behavior:
+Crit's source annotations come from the ion compiler (`ion-compiler/`, see its README):
 
-- `babel-processor.js` clones + transforms the app into the mirror (now accepts
-  `pluginOptions`/`extraIgnorePatterns`).
-- `ion-babel-plugin.js` stamps `data-ion-*` attributes and injects script tags into JSX
-  `<body>` elements (now accepts an `injectScripts` option; default behavior unchanged).
-- `ion-injection.js` is served in the mirror at `/ion-injection.js` (window.__ion snapshot
-  tooling), and the Crit overlay decodes `data-ion-id` to attach `source.file/line/component`
+- `babel-processor.js` clones + transforms the app into the mirror.
+- `ion-babel-plugin.js` stamps `data-ion-*` attributes and injects the overlay script tag
+  into JSX `<body>` elements.
+- The Crit overlay decodes `data-ion-id` in the browser to attach `source.file/line/component`
   to event targets.
 
 ## Known limitations

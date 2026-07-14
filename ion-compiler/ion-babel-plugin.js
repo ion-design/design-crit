@@ -12,8 +12,8 @@ const CALLER_ATTRIBUTE_NAME = 'data-ion-caller-id';
 const PATH_ATTRIBUTE_NAME = 'data-ion-path';
 
 // Default script(s) injected into <body>. Override with the plugin option
-// `injectScripts: ['/ion-injection.js', '/crit-overlay.js']`.
-const DEFAULT_INJECT_SCRIPTS = ['/ion-injection.js'];
+// `injectScripts: ['/crit-overlay.js']`.
+const DEFAULT_INJECT_SCRIPTS = ['/crit-overlay.js'];
 
 function encodeNodeInfo(nodeInfo) {
   return Buffer.from(JSON.stringify(nodeInfo)).toString('base64');

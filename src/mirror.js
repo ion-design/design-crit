@@ -8,11 +8,10 @@
 const fs = require('fs');
 const path = require('path');
 const { spawnSync } = require('child_process');
-const { BabelProcessor } = require('../ion-compiler-export/babel-processor');
+const { BabelProcessor } = require('../ion-compiler/babel-processor');
 const { log } = require('./util');
 
 const OVERLAY_SRC = path.resolve(__dirname, '..', 'overlay', 'crit-overlay.js');
-const ION_INJECTION_SRC = path.resolve(__dirname, '..', 'ion-compiler-export', 'ion-injection.js');
 const CONFIG_PLACEHOLDER = '/*__CRIT_CONFIG__*/ null';
 
 /**
@@ -21,7 +20,7 @@ const CONFIG_PLACEHOLDER = '/*__CRIT_CONFIG__*/ null';
  */
 async function mirrorApp({ sourceDir, mirrorDir }) {
   const processor = new BabelProcessor(sourceDir, mirrorDir, {
-    pluginOptions: { injectScripts: ['/ion-injection.js', '/crit-overlay.js'] },
+    pluginOptions: { injectScripts: ['/crit-overlay.js'] },
   });
   const result = await processor.processDirectory(sourceDir);
   if (result.errors.length > 0) {
@@ -144,9 +143,8 @@ function linkEnvFiles({ sourceDir, mirrorDir }) {
 /**
  * Inject the Crit overlay runtime into the mirror:
  * 1. Write public/crit-overlay.js with the session config baked in.
- * 2. Write public/ion-injection.js (source-map decoder).
- * 3. For HTML-entrypoint apps (Vite), add script tags to index.html.
- *    (JSX-body apps like Next get their tags from the babel plugin.)
+ * 2. For HTML-entrypoint apps (Vite), add the script tag to index.html.
+ *    (JSX-body apps like Next get their tag from the babel plugin.)
  */
 function injectOverlay({ mirrorDir, config }) {
   const publicDir = path.join(mirrorDir, 'public');
@@ -158,7 +156,6 @@ function injectOverlay({ mirrorDir, config }) {
   }
   const baked = overlaySource.replace(CONFIG_PLACEHOLDER, JSON.stringify(config));
   fs.writeFileSync(path.join(publicDir, 'crit-overlay.js'), baked, 'utf-8');
-  fs.copyFileSync(ION_INJECTION_SRC, path.join(publicDir, 'ion-injection.js'));
 
   // HTML entrypoints (Vite and friends)
   for (const htmlName of ['index.html', 'app.html']) {
@@ -166,7 +163,7 @@ function injectOverlay({ mirrorDir, config }) {
     if (!fs.existsSync(htmlPath)) continue;
     let html = fs.readFileSync(htmlPath, 'utf-8');
     if (html.includes('/crit-overlay.js')) continue;
-    const tags = '<script src="/ion-injection.js" async></script><script src="/crit-overlay.js" async></script>';
+    const tags = '<script src="/crit-overlay.js" async></script>';
     if (html.includes('</body>')) {
       html = html.replace('</body>', `${tags}</body>`);
     } else if (html.includes('</html>')) {

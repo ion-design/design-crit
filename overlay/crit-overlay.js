@@ -21,8 +21,12 @@
   var SESSION_ID = CRIT_CONFIG.sessionId;
   var COLLECTOR = CRIT_CONFIG.collectorUrl.replace(/\/$/, '');
 
-  var MOUSEMOVE_THROTTLE_MS = 120; // ~8 samples/sec
-  var SCROLL_THROTTLE_MS = 250;
+  // Sampling windows. Both use leading + trailing capture: the first event in a
+  // window is recorded immediately, and the newest suppressed event is recorded
+  // when the window closes — so the pointer's final rest position and the final
+  // scroll position are never lost.
+  var MOUSEMOVE_SAMPLE_MS = 80; // ~12 samples/sec
+  var SCROLL_SAMPLE_MS = 150;
   var FLUSH_INTERVAL_MS = 1000;
 
   // ============================================
@@ -222,13 +226,7 @@
     srcPanel.appendChild(dismiss);
   }
 
-  var lastMove = 0;
-  function onMouseMove(e) {
-    if (state !== 'recording' || isWidgetEvent(e)) return;
-    var now = Date.now();
-    if (now - lastMove < MOUSEMOVE_THROTTLE_MS) return;
-    lastMove = now;
-    updateSourceMarker(e.target);
+  function recordMove(e) {
     var ev = baseEvent('mousemove');
     ev.x = e.clientX;
     ev.y = e.clientY;
@@ -236,6 +234,40 @@
     ev.y_pct = round3(e.clientY / window.innerHeight);
     ev.target = describeTarget(e.target);
     pushEvent(ev);
+  }
+
+  var lastMove = 0;
+  var pendingMove = null;
+  var pendingMoveTimer = null;
+  function onMouseMove(e) {
+    if (state !== 'recording' || isWidgetEvent(e)) return;
+    updateSourceMarker(e.target); // unthrottled: the inspector tracks instantly
+    var now = Date.now();
+    var elapsed = now - lastMove;
+    if (elapsed >= MOUSEMOVE_SAMPLE_MS) {
+      lastMove = now;
+      pendingMove = null;
+      if (pendingMoveTimer) {
+        clearTimeout(pendingMoveTimer);
+        pendingMoveTimer = null;
+      }
+      recordMove(e);
+      return;
+    }
+    // Inside the sampling window: remember the newest move and record it when
+    // the window closes, so a pointer that comes to rest is always captured.
+    pendingMove = e;
+    if (!pendingMoveTimer) {
+      pendingMoveTimer = setTimeout(function () {
+        pendingMoveTimer = null;
+        var pe = pendingMove;
+        pendingMove = null;
+        if (pe && state === 'recording') {
+          lastMove = Date.now();
+          recordMove(pe);
+        }
+      }, MOUSEMOVE_SAMPLE_MS - elapsed);
+    }
   }
 
   function onPointerButton(type) {
@@ -252,12 +284,27 @@
   }
 
   var lastScroll = 0;
+  var pendingScrollTimer = null;
   function onScroll() {
     if (state !== 'recording') return;
     var now = Date.now();
-    if (now - lastScroll < SCROLL_THROTTLE_MS) return;
-    lastScroll = now;
-    pushEvent(baseEvent('scroll'));
+    var elapsed = now - lastScroll;
+    if (elapsed >= SCROLL_SAMPLE_MS) {
+      lastScroll = now;
+      pushEvent(baseEvent('scroll'));
+      return;
+    }
+    // Trailing capture: baseEvent reads the live scroll position at fire time,
+    // so the final resting position is always recorded.
+    if (!pendingScrollTimer) {
+      pendingScrollTimer = setTimeout(function () {
+        pendingScrollTimer = null;
+        if (state === 'recording') {
+          lastScroll = Date.now();
+          pushEvent(baseEvent('scroll'));
+        }
+      }, SCROLL_SAMPLE_MS - elapsed);
+    }
   }
 
   var resizeTimer = null;
@@ -483,12 +530,16 @@
   var style = document.createElement('style');
   style.textContent = [
     ':host { all: initial; }',
-    // Shared glass panel treatment
-    '.glass { background: rgba(18, 21, 28, 0.55);',
-    '  -webkit-backdrop-filter: blur(20px) saturate(1.7); backdrop-filter: blur(20px) saturate(1.7);',
-    '  border: 1px solid rgba(255,255,255,0.14); border-radius: 16px;',
-    '  box-shadow: 0 12px 40px rgba(0,0,0,0.35), inset 0 1px 0 rgba(255,255,255,0.12),',
-    '    inset 0 -1px 0 rgba(0,0,0,0.2);',
+    // Shared glass panel treatment: a translucent tint under a soft top sheen,
+    // heavy blur + saturation so the app shows through like frosted glass.
+    '.glass { background:',
+    '  linear-gradient(180deg, rgba(255,255,255,0.12) 0%, rgba(255,255,255,0.03) 45%, rgba(255,255,255,0) 100%),',
+    '  rgba(14, 17, 24, 0.52);',
+    '  -webkit-backdrop-filter: blur(32px) saturate(1.9);',
+    '  backdrop-filter: blur(32px) saturate(1.9);',
+    '  border: 1px solid rgba(255,255,255,0.18); border-radius: 18px;',
+    '  box-shadow: 0 16px 48px rgba(0,0,0,0.35), 0 2px 8px rgba(0,0,0,0.18),',
+    '    inset 0 1px 0 rgba(255,255,255,0.25), inset 0 -1px 0 rgba(0,0,0,0.15);',
     '  color: #f2f4f8; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }',
     // Main recording pill
     '.crit { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);',
@@ -503,13 +554,15 @@
     '.crit .label.wrap { white-space: normal; max-width: 380px; overflow: visible; user-select: text; cursor: text; }',
     '.crit .time { font-variant-numeric: tabular-nums; font-size: 13px; color: rgba(242,244,248,0.65); }',
     '.crit button, .crit-src button { all: unset; cursor: pointer; font-size: 13px; font-weight: 600; padding: 6px 12px;',
-    '  border-radius: 10px; background: rgba(255,255,255,0.10); color: #f2f4f8; white-space: nowrap;',
-    '  border: 1px solid rgba(255,255,255,0.08); transition: background .15s ease; }',
+    '  border-radius: 11px; background: rgba(255,255,255,0.10); color: #f2f4f8; white-space: nowrap;',
+    '  border: 1px solid rgba(255,255,255,0.14);',
+    '  box-shadow: inset 0 1px 0 rgba(255,255,255,0.15); transition: background .15s ease; }',
     '.crit button:hover, .crit-src button:hover { background: rgba(255,255,255,0.18); }',
-    '.crit button.primary { background: rgba(225,29,72,0.85); border-color: rgba(255,255,255,0.18);',
-    '  box-shadow: 0 2px 12px rgba(225,29,72,0.35); }',
-    '.crit button.primary:hover { background: rgba(244,63,94,0.95); }',
-    '.crit button.subtle, .crit-src button.subtle { background: transparent; border: none; color: rgba(242,244,248,0.55); padding: 6px 6px; }',
+    '.crit button.primary { background: rgba(225,29,72,0.75); border-color: rgba(255,255,255,0.25);',
+    '  box-shadow: 0 2px 14px rgba(225,29,72,0.4), inset 0 1px 0 rgba(255,255,255,0.3); }',
+    '.crit button.primary:hover { background: rgba(244,63,94,0.85); }',
+    '.crit button.subtle, .crit-src button.subtle { background: transparent; border: none; box-shadow: none;',
+    '  color: rgba(242,244,248,0.55); padding: 6px 6px; }',
     '.crit button.subtle:hover, .crit-src button.subtle:hover { color: #f2f4f8; background: transparent; }',
     '.crit .spinner { width: 14px; height: 14px; border: 2px solid rgba(255,255,255,0.2); border-top-color: #f2f4f8;',
     '  border-radius: 50%; animation: crit-spin .8s linear infinite; flex: none; }',

@@ -12,7 +12,7 @@
     "src/",
     "overlay/",
     "skill/",
-    "ion-compiler-export/",
+    "ion-compiler/",
     "docs/",
     "README.md",
     "LICENSE"
