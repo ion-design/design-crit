@@ -1,5 +1,7 @@
 # ion compiler
 
+<img src="../docs/assets/crit-magnifier.png" alt="Crit, a doodled speech-bubble character, inspecting with a magnifying glass" width="150" align="right">
+
 The Babel pipeline that makes every rendered DOM element traceable back to its JSX source.
 Extracted from [ion.design](https://ion.design)'s compiler and slimmed to what design-crit uses.
 

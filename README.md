@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="docs/assets/crit-wave.png" alt="Crit, a doodled speech-bubble character with ^ ^ eyes, waving hello" width="220">
+</p>
+
 # design-crit
 
 **Give your AI agent a design review it can see: you talk and point at the real app, the agent gets a timestamped transcript with the source file of everything you pointed at.**
