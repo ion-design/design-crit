@@ -1,6 +1,6 @@
 {
   "name": "design-crit",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Agent-requested app review sessions. Crit mirrors your app, records a narrated review with pointer + source-code context, and returns a merged timestamped transcript to the agent.",
   "license": "MIT",
   "author": "Samraaj Bath",
@@ -29,7 +29,7 @@
     "type": "git",
     "url": "git+https://github.com/ion-design/design-crit.git"
   },
-  "homepage": "https://github.com/ion-design/design-crit#readme",
+  "homepage": "https://design-crit.ai",
   "bugs": {
     "url": "https://github.com/ion-design/design-crit/issues"
   },

@@ -24,7 +24,7 @@ npx design-crit install --dry-run          # see what it would do
 
 ## Set API keys
 
-One OpenAI key covers everything: Whisper for transcription, `gpt-4.1-mini` for the merge.
+One OpenAI key covers everything: Whisper for transcription, `gpt-5.6-luna` for the merge.
 
 ```bash
 export OPENAI_API_KEY=sk-...      # required

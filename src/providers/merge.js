@@ -147,10 +147,10 @@ class AnthropicMergeProvider {
 class OpenAIMergeProvider {
   constructor({ model, apiKey } = {}) {
     this.name = 'openai';
-    // gpt-4.1-mini balances merge quality and post-Stop latency (~5s);
-    // gpt-4.1-nano is faster but weaker on long reviews, gpt-5-* are
-    // reasoning models and take 15s+ for this task.
-    this.model = model || 'gpt-4.1-mini';
+    // gpt-5.6-luna with reasoning off: the merge is mechanical extraction, so
+    // reasoning tokens only add post-Stop latency. Measured ~1.6s for a short
+    // review, comparable to gpt-4.1-mini but a much stronger model.
+    this.model = model || 'gpt-5.6-luna';
     this.apiKey = apiKey || process.env.OPENAI_API_KEY;
   }
 
@@ -160,17 +160,21 @@ class OpenAIMergeProvider {
       err.code = 'MERGE_FAILED';
       throw err;
     }
+    const body = {
+      model: this.model,
+      response_format: { type: 'json_object' },
+      messages: [
+        { role: 'system', content: MERGE_SYSTEM_PROMPT },
+        { role: 'user', content: buildMergeInput(input) },
+      ],
+    };
+    // GPT-5.6 models accept reasoning_effort "none"; older models reject the
+    // value, so only send it where it is supported.
+    if (/^gpt-5\.6/.test(this.model)) body.reasoning_effort = 'none';
     const res = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
       headers: { 'content-type': 'application/json', Authorization: `Bearer ${this.apiKey}` },
-      body: JSON.stringify({
-        model: this.model,
-        response_format: { type: 'json_object' },
-        messages: [
-          { role: 'system', content: MERGE_SYSTEM_PROMPT },
-          { role: 'user', content: buildMergeInput(input) },
-        ],
-      }),
+      body: JSON.stringify(body),
     });
     if (!res.ok) {
       const body = await res.text().catch(() => '');
